@@ -1,4 +1,4 @@
-# Görsel İllüzyonlarda İnsan Algısı ve Yapay Sinir Ağlarının Karşılaştırılması
+# Görsel İllüzyonlar Bağlamında İnsan Görsel Algısı ile Yapay Sinir Ağlarının Karşılaştırmalı Analizi
 
 ## Proje Hakkında
 
