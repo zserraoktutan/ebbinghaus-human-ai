@@ -28,6 +28,7 @@ from scipy.optimize import minimize
 # PsychoPy'deki klavye bileşeninin adı farklıysa yalnızca burayı değiştirin
 KEY_COL = "resp.keys"
 RT_COL = "resp.rt"
+MAIN_LOOP = "trials"   # Builder'daki ana döngünün adı
 
 # Önceden belirlenmiş dışlama ölçütleri (PDF Bölüm 4)
 MIN_CATCH_ACC = 0.80
@@ -46,7 +47,10 @@ def load_folder(folder):
     if not files:
         raise SystemExit(f"{folder} içinde CSV yok.")
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
-    # PsychoPy alıştırma/talimat satırlarında condition boş olur: at
+    # Yalnızca ana döngünün (adı 'trials') satırları; alıştırma döngüsü
+    # ('practice') ve talimat satırları atılır.
+    if MAIN_LOOP + ".thisN" in df.columns:
+        df = df[df[MAIN_LOOP + ".thisN"].notna()]
     df = df[df["condition"].notna()].copy()
     df["key"] = df[KEY_COL].replace({"None": np.nan, "": np.nan})
     df["rt"] = pd.to_numeric(df[RT_COL], errors="coerce")
@@ -140,9 +144,19 @@ def group_summary(per_pp):
 def ratio_slopes(per_pp, clean):
     """Katılımcı başına PSE kayması ~ log(oran) eğimi (yakın koşullar) + t-testi."""
     from scipy.stats import ttest_1samp
-    info = clean.drop_duplicates("condition")[["condition", "ratio", "far"]]
-    m = per_pp.merge(info, on="condition")
-    m = m[(m["far"].astype(str) != "True") & m["ratio"].notna() & (m["ratio"].astype(str) != "")]
+    cols = [c for c in ("condition", "ratio", "far", "gap") if c in clean.columns]
+    info = clean.drop_duplicates("condition")[cols].copy()
+    info["ratio"] = pd.to_numeric(info["ratio"], errors="coerce")
+    has_ratio = info["ratio"].notna()
+    if "far" in info:                       # simüle veri
+        far = info["far"].astype(str) == "True"
+    elif "gap" in info:                     # stimuli.csv: yakın koşulların gap'i en sık olan
+        near_gap = info.loc[has_ratio, "gap"].mode().iloc[0]
+        far = info["gap"] != near_gap
+    else:
+        far = info["condition"].str.contains("far|uzak", case=False)
+    near = info.loc[has_ratio & ~far, ["condition", "ratio"]]
+    m = per_pp.merge(near, on="condition")
     m["log_ratio"] = np.log(m["ratio"].astype(float))
     slopes = m.groupby("participant").apply(
         lambda x: np.polyfit(x["log_ratio"], x["pse_shift_pct"], 1)[0], include_groups=False)
