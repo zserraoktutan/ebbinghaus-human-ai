@@ -192,9 +192,21 @@ def plot(clean, per_pp, path):
 
 
 def main():
-    folder = Path(sys.argv[1] if len(sys.argv) > 1 else "data/sim")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    test_mode = "--hepsi" in sys.argv   # deneme için: katılımcı dışlamayı atla
+    folder = Path(args[0] if args else "data/sim")
     df = load_folder(folder)
     clean, report = apply_exclusions(df)
+    if test_mode and report["excluded"].any():
+        print("--hepsi: dışlama ölçütleri yalnızca raporlanıyor, kimse çıkarılmıyor.")
+        print(report[report["excluded"]].to_string(index=False), "\n")
+        report["excluded"] = False
+        clean = df[(df["condition"] != "catch") & ~df["timeout"] & (df["rt"] >= MIN_RT)].copy()
+    if clean.empty:
+        print("Analize kalan katılımcı yok. Dışlanma nedenleri:")
+        print(report.to_string(index=False))
+        print("\nDeneme verisiyle test ediyorsanız komutun sonuna --hepsi ekleyin.")
+        sys.exit(1)
     per_pp = fit_all(clean)
     grp = group_summary(per_pp)
 
