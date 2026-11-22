@@ -1,6 +1,11 @@
 """Regresyon eğitim döngüsü (plan §5: Adam 1e-3, batch 64, 10 epoch,
 20.000 eğitim görseli, 2.000 doğrulama görseli, en iyi doğrulama kaybındaki ağırlık).
 
+Öğrenme oranı: 1e-3'ten 1e-5'e kosinüs azalma (adım başına). İlk deneme eğitiminde
+sabit 1e-3 ile doğrulama hatası epoch'tan epoch'a %0,5 ile %3,8 arasında sıçradı;
+azalan öğrenme oranı son epoch'ları kararlı hale getirir ve "en iyi epoch" seçiminin
+şansa bağlı olmasını önler.
+
 Hız notu: Görsel üretimi (4x çizim + LANCZOS küçültme) Colab CPU'sunda yavaştır
 (~130 s / 20.000 görsel). Bu yüzden her eğitimin başında görseller BİR KEZ üretilip
 uint8 olarak GPU belleğinde tutulur (~1 GB) ve 10 epoch boyunca bu havuz karıştırılarak
@@ -26,7 +31,7 @@ from model import data
 from model.cnn import RegressionNet
 
 DEFAULTS = dict(epochs=10, n_train=20_000, n_val=2_000, batch_size=64, lr=1e-3,
-                num_workers=2, amp=True)
+                lr_min=1e-5, num_workers=2, amp=True)
 
 
 def set_seed(seed):
@@ -108,6 +113,8 @@ def train_regression(regime, seed, out_dir, log=print, **kw):
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     loss_fn = nn.MSELoss()
     g = torch.Generator(device="cpu").manual_seed(seed)
+    steps = cfg["epochs"] * (cfg["n_train"] // cfg["batch_size"])
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps, eta_min=cfg["lr_min"])
 
     best, hist = math.inf, []
     for ep in range(cfg["epochs"]):
@@ -123,6 +130,7 @@ def train_regression(regime, seed, out_dir, log=print, **kw):
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
+            sched.step()
             tot += loss.item() * y.numel()
             cnt += y.numel()
         val_mse, val_mape = evaluate(model, Xva, Yva)
@@ -131,10 +139,11 @@ def train_regression(regime, seed, out_dir, log=print, **kw):
             best = val_mse
             torch.save({"state_dict": model.state_dict(), "epoch": ep + 1, "val_mse": val_mse,
                         "regime": regime, "seed": seed, "cfg": cfg}, ckpt)
-        row = dict(epoch=ep + 1, train_mse=tot / cnt, val_mse=val_mse, val_mape=val_mape,
-                   best=int(is_best), sec=round(time.time() - t0, 1))
+        row = dict(epoch=ep + 1, lr=opt.param_groups[0]["lr"], train_mse=tot / cnt,
+                   val_mse=val_mse, val_mape=val_mape, best=int(is_best),
+                   sec=round(time.time() - t0, 1))
         hist.append(row)
-        log(f"  epoch {ep + 1:2d}/{cfg['epochs']}  train MSE {row['train_mse']:.5f}  "
+        log(f"  epoch {ep + 1:2d}/{cfg['epochs']}  lr {row['lr']:.1e}  train MSE {row['train_mse']:.5f}  "
             f"val MSE {val_mse:.5f}  val hata %{val_mape:.2f}  ({row['sec']} s){'  *' if is_best else ''}")
         with open(log_csv, "w", newline="") as f:     # her epoch'ta yaz: oturum koparsa kayıt kalsın
             w = csv.DictWriter(f, fieldnames=list(row))
