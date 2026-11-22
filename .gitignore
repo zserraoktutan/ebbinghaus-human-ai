@@ -223,3 +223,4 @@ __marimo__/
 .DS_Store
 data/
 deneme*
+*_lastrun.py
