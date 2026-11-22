@@ -83,21 +83,24 @@ def receptive_field(n_blocks=len(CHANNELS)):
     return rf
 
 
-def receptive_field_empirical(encoder, size=224, n=16, seed=0):
+def receptive_field_empirical(encoder, size=224, n=16, seed=0, rel_tol=1e-9):
     """Son blok haritasının ortadaki birimi girdide hangi piksellere duyarlı?
     n rastgele girdide gradyanı sıfır olmayan piksellerin birleşiminin genişliği.
     (MaxPool her pencerede tek piksele gradyan geçirdiği için tek girdi yetmez.)
-    Sonuç kuramsal değeri (94) aşmamalı ve ona yakın olmalı."""
-    was_training = encoder.training
-    encoder.eval()
-    p = next(encoder.parameters())
+
+    Hesap, gövdenin bir kopyası üzerinde CPU'da ve float64 ile yapılır: GPU'daki
+    hızlı konvolüsyon algoritmaları (Winograd/FFT) alıcı alanın dışına çok küçük
+    yuvarlama artıkları bırakır ve ölçümü şişirir. rel_tol, en büyük gradyana
+    göre bu tür artıkları eler. Sonuç kuramsal değeri (94) aşmamalı."""
+    import copy
+    enc = copy.deepcopy(encoder).cpu().double().eval()
     gen = torch.Generator().manual_seed(seed)
-    x = torch.rand(n, 1, size, size, generator=gen).to(p.device).requires_grad_(True)
-    fmap = encoder.features(x)                      # n x C x h x w
+    x = torch.rand(n, 1, size, size, generator=gen, dtype=torch.float64).requires_grad_(True)
+    fmap = enc.features(x)                          # n x C x h x w
     h, w = fmap.shape[-2:]
     fmap[:, :, h // 2, w // 2].sum().backward()
-    g = (x.grad[:, 0] != 0).any(0)                  # size x size
+    g = x.grad[:, 0].abs().amax(0)                  # size x size
+    g = g > g.max() * rel_tol
     rows = torch.nonzero(g.any(1)).flatten()
     cols = torch.nonzero(g.any(0)).flatten()
-    encoder.train(was_training)
     return int(rows.max() - rows.min() + 1), int(cols.max() - cols.min() + 1)
