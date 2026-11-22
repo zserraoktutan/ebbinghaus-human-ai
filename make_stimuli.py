@@ -70,6 +70,7 @@ def main():
                     corr = side                    # bağlamlı daire büyük
                 else:
                     corr = "right" if side == "left" else "left"  # karşılaştırma büyük
+                
 
                 rows.append({
                     "image": f"stimuli/png/{fname}",
@@ -85,6 +86,30 @@ def main():
                     "ctx_shift_x": f"{cs[0]:.2f}", "ctx_shift_y": f"{cs[1]:.2f}",
                     "cmp_shift_x": f"{ms[0]:.2f}", "cmp_shift_y": f"{ms[1]:.2f}",
                 })
+                    # --- Dikkat (catch) denemeleri: mevcut döngüden SONRA ---
+    name, r, g = next(x for x in condition_list() if x[0] == "tek")
+    for c in (0.6, 1.4):
+        for side in ("left", "right"):
+            img, rot, cs, ms = make_pair(r, g, c, side, rng)
+            fname = f"catch_c{c:.2f}_{side[0].upper()}.png"
+            img.save(PNG_DIR / fname)
+            cmp_side = "right" if side == "left" else "left"
+            corr = side if c < 1.0 else cmp_side
+
+            rows.append({
+                "image": f"stimuli/png/{fname}",
+                "condition": "catch",
+                "ratio": "" if r is None else r,
+                "gap": g,
+                "comparison": f"{c:.2f}",
+                "comparison_d": f"{HUMAN['center_d'] * c:.1f}",
+                "center_d": HUMAN["center_d"],
+                "context_side": side,
+                "corrAns": corr,
+                "rotation_deg": f"{math.degrees(rot):.1f}",
+                "ctx_shift_x": f"{cs[0]:.2f}", "ctx_shift_y": f"{cs[1]:.2f}",
+                "cmp_shift_x": f"{ms[0]:.2f}", "cmp_shift_y": f"{ms[1]:.2f}",
+            })
 
     with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
@@ -96,3 +121,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

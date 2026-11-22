@@ -79,3 +79,7 @@ stimuli/png/uzak_r2.0_c1.08_L.png,uzak_r2.0,2.0,1.5,1.08,64.8,60,left,right,30.8
 stimuli/png/uzak_r2.0_c1.08_R.png,uzak_r2.0,2.0,1.5,1.08,64.8,60,right,left,213.4,5.74,-6.76,-4.14,0.82
 stimuli/png/uzak_r2.0_c1.16_L.png,uzak_r2.0,2.0,1.5,1.16,69.6,60,left,right,128.6,9.46,-6.23,4.94,-9.81
 stimuli/png/uzak_r2.0_c1.16_R.png,uzak_r2.0,2.0,1.5,1.16,69.6,60,right,left,218.1,-0.40,-1.55,6.24,8.04
+stimuli/png/catch_c0.60_L.png,catch,,0.2,0.60,36.0,60,left,left,352.4,9.94,-6.58,0.32,-6.41
+stimuli/png/catch_c0.60_R.png,catch,,0.2,0.60,36.0,60,right,right,194.1,-6.72,7.74,0.30,7.65
+stimuli/png/catch_c1.40_L.png,catch,,0.2,1.40,84.0,60,left,right,231.6,-9.96,-2.51,-2.64,-5.68
+stimuli/png/catch_c1.40_R.png,catch,,0.2,1.40,84.0,60,right,left,55.5,2.20,-7.47,9.70,-0.31
