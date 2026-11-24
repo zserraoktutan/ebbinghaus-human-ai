@@ -13,15 +13,19 @@ import stimuli as st
 from model import data
 
 
+
 @torch.no_grad()
-def order_test(model, n_per_cell=50, seed=2026):
+def order_test(model, n_per_cell=50, seed=2026, comparisons=None):
+    """comparisons: test edilecek karşılaştırma boyutları (D cinsinden).
+    Verilmezse insan deneyiyle aynı 5 düzey (stimuli.COMPARISON) kullanılır."""
+    cs = st.COMPARISON if comparisons is None else comparisons
     device = next(model.parameters()).device
     model.eval()
     rng = np.random.default_rng(seed)
     D, s = data.D, data.MAX_SHIFT
     rows = []
     for name, r, g in st.condition_list():
-        for c in st.COMPARISON:
+        for c in cs:
             ctx, cmp = [], []
             for _ in range(n_per_cell):
                 rot = rng.uniform(0, 2 * np.pi)
@@ -36,6 +40,6 @@ def order_test(model, n_per_cell=50, seed=2026):
 
             p1 = torch.sigmoid(model(a, b)).mean().item()      # bağlamlı solda
             p2 = 1 - torch.sigmoid(model(b, a)).mean().item()  # bağlamlı sağda
-            rows.append(dict(condition=name, comparison=c,
+            rows.append(dict(condition=name, comparison=float(c),
                              p1=p1, p2=p2, p=(p1 + p2) / 2, bias=p1 - p2))
     return rows
