@@ -93,34 +93,70 @@ def _p(logc, logpse, s, lapse):
     return lapse / 2 + (1 - lapse) / (1 + np.exp(-z))
 
 
-def fit_participant(d):
-    """Tek katılımcı için ortak eğimli fit. Koşul başına PSE döndürür."""
-    conds = sorted(d["condition"].unique())
-    idx = d["condition"].map({c: i for i, c in enumerate(conds)}).to_numpy()
-    logc = np.log(d["comparison"].to_numpy(float))
-    y = d["chose_cmp"].to_numpy(float)
-    K = len(conds)
-
-    def nll(theta):
-        logpse = theta[:K][idx]
-        s = np.exp(theta[K])
-        lapse = theta[K + 1]
-        p = np.clip(_p(logc, logpse, s, lapse), 1e-9, 1 - 1e-9)
-        return -np.sum(y * np.log(p) + (1 - y) * np.log(1 - p))
-
-    x0 = np.r_[np.zeros(K), np.log(0.05), 0.02]
-    bounds = [(np.log(0.5), np.log(2.0))] * K + [(np.log(0.005), np.log(0.5)), (0.0, 0.10)]
-    res = minimize(nll, x0, method="L-BFGS-B", bounds=bounds)
-    pse = np.exp(res.x[:K])
-    out = pd.DataFrame({"condition": conds, "pse": pse,
-                        "pse_shift_pct": (pse - 1) * 100,
-                        "n_trials": d.groupby("condition").size().reindex(conds).to_numpy()})
-    out["s"] = np.exp(res.x[K])
-    out["lapse"] = res.x[K + 1]
-    out["converged"] = res.success
-    # Sınıra dayanan PSE güvenilmez: test aralığının (0.84–1.16) çok dışında
-    out["at_bound"] = (pse < 0.80) | (pse > 1.25)
+def censor_status(agg):
+    """Koşul başına PSE ölçüm aralığının içinde mi?
+    agg: condition, comparison, k (karşılaştırma seçilen), n
+    En büyük karşılaştırmada bile karşılaştırma <%50 seçildiyse PSE > üst sınır;
+    en küçükte bile >%50 seçildiyse PSE < alt sınır. Bu durumda PSE tahmin
+    EDİLEMEZ, yalnızca bir sınır raporlanır."""
+    out = {}
+    lo, hi = agg["comparison"].min(), agg["comparison"].max()
+    for c, g in agg.groupby("condition"):
+        g = g.sort_values("comparison")
+        p_lo = g["k"].iloc[0] / g["n"].iloc[0]
+        p_hi = g["k"].iloc[-1] / g["n"].iloc[-1]
+        if p_hi < 0.5:
+            out[c] = f">{hi:.2f}"
+        elif p_lo > 0.5:
+            out[c] = f"<{lo:.2f}"
+        else:
+            out[c] = ""
     return out
+
+
+def fit_agg(agg, lapse_max=0.10):
+    """Ortak eğimli fit, gruplanmış veri üzerinde.
+    agg: condition, comparison, k, n  (k kesirli olabilir: model olasılıkları).
+    Aralık dışı (sansürlü) koşullar fit'e katılmaz, PSE'leri NaN olur."""
+    cens = censor_status(agg)
+    conds = sorted(agg["condition"].unique())
+    ok = [c for c in conds if not cens[c]]
+    fit = agg[agg["condition"].isin(ok)]
+    pse_map, s, lapse, conv = {}, np.nan, np.nan, False
+    if ok:
+        idx = fit["condition"].map({c: i for i, c in enumerate(ok)}).to_numpy()
+        logc = np.log(fit["comparison"].to_numpy(float))
+        k = fit["k"].to_numpy(float)
+        n = fit["n"].to_numpy(float)
+        K = len(ok)
+
+        def nll(theta):
+            p = np.clip(_p(logc, theta[:K][idx], np.exp(theta[K]), theta[K + 1]), 1e-12, 1 - 1e-12)
+            return -np.sum(k * np.log(p) + (n - k) * np.log(1 - p))
+
+        x0 = np.r_[np.zeros(K), np.log(0.05), min(0.02, lapse_max)]
+        bounds = ([(np.log(0.5), np.log(2.0))] * K
+                  + [(np.log(0.001), np.log(0.5)), (0.0, lapse_max)])
+        res = minimize(nll, x0, method="L-BFGS-B", bounds=bounds)
+        pse_map = dict(zip(ok, np.exp(res.x[:K])))
+        s, lapse, conv = np.exp(res.x[K]), res.x[K + 1], res.success
+
+    out = pd.DataFrame({"condition": conds})
+    out["pse"] = out["condition"].map(pse_map)
+    out["pse_shift_pct"] = (out["pse"] - 1) * 100
+    out["censored"] = out["condition"].map(cens)   # "", ">1.16" ya da "<0.84"
+    out["n_trials"] = agg.groupby("condition")["n"].sum().reindex(conds).to_numpy()
+    out["s"], out["lapse"], out["converged"] = s, lapse, conv
+    # Aralık içinde ama yine de sınıra yakın (güvenilmez) tahminler
+    out["at_bound"] = (out["pse"] < 0.80) | (out["pse"] > 1.25)
+    return out
+
+
+def fit_participant(d):
+    """Tek katılımcının deneme verisi -> koşul başına PSE."""
+    agg = (d.groupby(["condition", "comparison"])["chose_cmp"]
+             .agg(k="sum", n="size").reset_index())
+    return fit_agg(agg)
 
 
 def fit_all(clean):
@@ -133,12 +169,19 @@ def fit_all(clean):
 
 
 def group_summary(per_pp):
-    g = per_pp.groupby("condition")["pse_shift_pct"]
-    out = pd.DataFrame({"n": g.size(), "mean_shift_pct": g.mean(), "sd": g.std()})
+    """Grup ortalaması yalnızca aralık içindeki PSE'lerden; sansürlüler ayrıca sayılır."""
+    rows = []
+    for c, g in per_pp.groupby("condition"):
+        v = g["pse_shift_pct"].dropna()
+        rows.append({"condition": c, "n": len(v),
+                     "n_above": (g["censored"].str.startswith(">")).sum(),
+                     "n_below": (g["censored"].str.startswith("<")).sum(),
+                     "mean_shift_pct": v.mean(), "sd": v.std()})
+    out = pd.DataFrame(rows)
     out["sem"] = out["sd"] / np.sqrt(out["n"])
     out["ci95_low"] = out["mean_shift_pct"] - 1.96 * out["sem"]
     out["ci95_high"] = out["mean_shift_pct"] + 1.96 * out["sem"]
-    return out.reset_index()
+    return out
 
 
 def ratio_slopes(per_pp, clean):
@@ -158,41 +201,96 @@ def ratio_slopes(per_pp, clean):
     near = info.loc[has_ratio & ~far, ["condition", "ratio"]]
     m = per_pp.merge(near, on="condition")
     m["log_ratio"] = np.log(m["ratio"].astype(float))
+    m = m.dropna(subset=["pse_shift_pct"])
+    m = m.groupby("participant").filter(lambda x: len(x) >= 2)
+    if m.empty:
+        return pd.Series(dtype=float), None
     slopes = m.groupby("participant").apply(
         lambda x: np.polyfit(x["log_ratio"], x["pse_shift_pct"], 1)[0], include_groups=False)
     t = ttest_1samp(slopes, 0)
     return slopes, t
 
 
-def plot(clean, per_pp, path):
+def plot(agg, per_pp, path, ylabel="P(karşılaştırma daha büyük)"):
+    """agg: condition, comparison, k, n (tüm katılımcılar birleşik)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    conds = sorted(clean["condition"].unique())
+    conds = sorted(agg["condition"].unique())
     fig, axes = plt.subplots(2, (len(conds) + 1) // 2, figsize=(14, 6), sharey=True)
     xs = np.linspace(0.82, 1.18, 200)
     for ax, c in zip(axes.flat, conds):
-        d = clean[clean["condition"] == c]
-        prop = d.groupby("comparison")["chose_cmp"].mean()
-        ax.plot(prop.index, prop.values, "o", color="#333")
-        f = per_pp[per_pp["condition"] == c]
-        pse = np.exp(np.log(f["pse"]).mean())
-        s, lapse = f["s"].median(), f["lapse"].median()
-        ax.plot(xs, _p(np.log(xs), np.log(pse), s, lapse), color="#2a6fdb")
-        ax.axvline(pse, ls="--", color="#2a6fdb", lw=1)
+        g = agg[agg["condition"] == c].groupby("comparison")[["k", "n"]].sum()
+        ax.plot(g.index, g["k"] / g["n"], "o", color="#333")
         ax.axhline(0.5, color="#aaa", lw=0.8)
-        ax.set_title(f"{c}  (PSE {pse:.3f})", fontsize=10)
+        f = per_pp[(per_pp["condition"] == c) & per_pp["pse"].notna()]
+        n_cens = (per_pp[per_pp["condition"] == c]["censored"] != "").sum()
+        if len(f):
+            pse = np.exp(np.log(f["pse"]).mean())
+            s, lapse = f["s"].median(), f["lapse"].median()
+            ax.plot(xs, _p(np.log(xs), np.log(pse), s, lapse), color="#2a6fdb")
+            ax.axvline(pse, ls="--", color="#2a6fdb", lw=1)
+            title = f"{c}  (PSE {pse:.3f})"
+        else:
+            title = f"{c}  (PSE {per_pp[per_pp['condition'] == c]['censored'].iloc[0]})"
+        if n_cens and len(f):
+            title += f"  [{n_cens} aralık dışı]"
+        ax.set_title(title, fontsize=10)
     for ax in axes.flat[len(conds):]:
         ax.axis("off")
     fig.supxlabel("karşılaştırma / D")
-    fig.supylabel("P(karşılaştırma daha büyük)")
+    fig.supylabel(ylabel)
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
 
 
+def load_model(path, p_is_cmp=False):
+    """Model 2AFC çıktısı: condition, comparison, p.
+    Varsayılan: p = P(model BAĞLAMLI merkezi daha büyük seçti).
+    (tek koşulunda p, karşılaştırma büyüdükçe 1'den 0'a iniyorsa doğru varsayım.)
+    p karşılaştırmanın seçilme olasılığıysa --p-karsilastirma kullanın."""
+    m = pd.read_csv(path)
+    need = {"condition", "comparison", "p"}
+    if not need <= set(m.columns):
+        raise SystemExit(f"Model dosyasında {sorted(need)} sütunları gerekli. Var olanlar: {list(m.columns)}")
+    p_cmp = m["p"] if p_is_cmp else 1 - m["p"]
+    agg = pd.DataFrame({"condition": m["condition"], "comparison": m["comparison"].astype(float),
+                        "k": p_cmp.astype(float), "n": 1.0})
+    return agg, m
+
+
+def main_model(path, p_is_cmp):
+    path = Path(path)
+    agg, m = load_model(path, p_is_cmp)
+    res = fit_agg(agg, lapse_max=0.0)      # model deterministik: lapse yok
+    res.insert(0, "participant", path.stem)
+    out = path.with_name(path.stem + "_pse.csv")
+    res.to_csv(out, index=False)
+    plot(agg, res, path.with_name(path.stem + "_psychometric.png"))
+    print(f"Model: {path.name}")
+    if "bias" in m:
+        print(f"İki görüntü sırası arasındaki en büyük fark (|bias|): {m['bias'].abs().max():.3g}")
+    show = res[["condition", "pse", "pse_shift_pct", "censored"]].copy()
+    print(show.round(3).to_string(index=False))
+    lo, hi = agg["comparison"].min(), agg["comparison"].max()
+    cens = res[res["censored"] != ""]
+    if len(cens):
+        print(f"\n{len(cens)} koşulda PSE ölçüm aralığının ({lo:.2f}–{hi:.2f}) DIŞINDA:")
+        for _, r in cens.iterrows():
+            yon = ("merkez KÜÇÜK algılanıyor (kayma < -%{:.0f})".format((1 - lo) * 100)
+                   if r["censored"].startswith("<")
+                   else "merkez BÜYÜK algılanıyor (kayma > +%{:.0f})".format((hi - 1) * 100))
+            print(f"  {r['condition']:<10} PSE {r['censored']}  -> {yon}")
+        print("Bu koşullarda PSE sayısı yok; yalnızca yön ve alt sınır raporlanabilir.\n"
+              "Gerçek PSE için modeli daha geniş bir karşılaştırma aralığında test edin.")
+    print(f"\n-> {out}")
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if "--model" in sys.argv:
+        return main_model(args[0], "--p-karsilastirma" in sys.argv)
     test_mode = "--hepsi" in sys.argv   # deneme için: katılımcı dışlamayı atla
     folder = Path(args[0] if args else "data/sim")
     df = load_folder(folder)
@@ -213,20 +311,30 @@ def main():
     per_pp.to_csv(folder / "pse_by_participant.csv", index=False)
     grp.to_csv(folder / "pse_group.csv", index=False)
     report.to_csv(folder / "excluded.csv", index=False)
-    plot(clean, per_pp, folder / "psychometric.png")
+    agg = (clean.groupby(["condition", "comparison"])["chose_cmp"]
+             .agg(k="sum", n="size").reset_index())
+    plot(agg, per_pp, folder / "psychometric.png")
 
     print(f"Katılımcı: {report.shape[0]}, dışlanan: {report['excluded'].sum()}")
     if report["excluded"].any():
         print(report[report["excluded"]].to_string(index=False))
     print("\nGrup PSE kayması (%):")
     print(grp.round(2).to_string(index=False))
-    bad = per_pp[per_pp["at_bound"] | ~per_pp["converged"]]
+    cens = per_pp[per_pp["censored"] != ""]
+    if len(cens):
+        print("\nUYARI: PSE'si ölçüm aralığının dışında kalan (sansürlü) fit'ler "
+              "(grup ortalamasına katılmadı, n_above / n_below sütunlarında sayıldı):")
+        print(cens[["participant", "condition", "censored"]].to_string(index=False))
+    bad = per_pp[(per_pp["at_bound"] | ~per_pp["converged"]) & (per_pp["censored"] == "")]
     if len(bad):
         print("\nUYARI: sınıra dayanan / yakınsamayan fit'ler:")
         print(bad.to_string(index=False))
     slopes, t = ratio_slopes(per_pp, clean)
-    print(f"\nPSE ~ log(oran) eğimi: ort. {slopes.mean():.2f} %/log-birim, "
-          f"t({len(slopes)-1}) = {t.statistic:.2f}, p = {t.pvalue:.2g}")
+    if t is None or len(slopes) < 2:
+        print("\nPSE ~ log(oran) eğimi: t-testi için en az 2 katılımcı gerekli.")
+    else:
+        print(f"\nPSE ~ log(oran) eğimi: ort. {slopes.mean():.2f} %/log-birim, "
+              f"t({len(slopes)-1}) = {t.statistic:.2f}, p = {t.pvalue:.2g}")
 
 
 if __name__ == "__main__":
