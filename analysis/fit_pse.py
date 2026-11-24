@@ -114,10 +114,13 @@ def censor_status(agg):
     return out
 
 
-def fit_agg(agg, lapse_max=0.10):
+def fit_agg(agg, lapse_max=0.10, shared_slope=True):
     """Ortak eğimli fit, gruplanmış veri üzerinde.
     agg: condition, comparison, k, n  (k kesirli olabilir: model olasılıkları).
     Aralık dışı (sansürlü) koşullar fit'e katılmaz, PSE'leri NaN olur."""
+    if not shared_slope:   # model: her koşula kendi eğimi (deneme sayısı sorun değil)
+        parts = [fit_agg(g, lapse_max, True) for _, g in agg.groupby("condition")]
+        return pd.concat(parts, ignore_index=True)
     cens = censor_status(agg)
     conds = sorted(agg["condition"].unique())
     ok = [c for c in conds if not cens[c]]
@@ -263,7 +266,7 @@ def load_model(path, p_is_cmp=False):
 def main_model(path, p_is_cmp):
     path = Path(path)
     agg, m = load_model(path, p_is_cmp)
-    res = fit_agg(agg, lapse_max=0.0)      # model deterministik: lapse yok
+    res = fit_agg(agg, lapse_max=0.0, shared_slope=False)  # model: lapse yok, koşul başına eğim
     res.insert(0, "participant", path.stem)
     out = path.with_name(path.stem + "_pse.csv")
     res.to_csv(out, index=False)
