@@ -68,13 +68,18 @@ def apply_exclusions(df):
         catch = d[d["condition"] == "catch"]
         catch_ok = catch[~catch["timeout"]]
         acc = (catch_ok["key"] == catch_ok["corrAns"]).mean() if len(catch_ok) else np.nan
+        # Çevreli dikkat denemeleri (ratio dolu): "hep bağlamlı tarafa bas" stratejisini yakalar
+        r = pd.to_numeric(catch_ok["ratio"], errors="coerce") if "ratio" in catch_ok else pd.Series(dtype=float)
+        ctx = catch_ok[r.notna().to_numpy()] if len(r) else catch_ok.iloc[0:0]
+        ctx_acc = (ctx["key"] == ctx["corrAns"]).mean() if len(ctx) else np.nan
         to = d["timeout"].mean()
         reasons = []
         if len(catch) and acc < MIN_CATCH_ACC:
             reasons.append(f"dikkat doğruluğu %{acc*100:.0f}")
         if to > MAX_TIMEOUT:
             reasons.append(f"zaman aşımı %{to*100:.0f}")
-        report.append({"participant": pid, "catch_acc": acc, "timeout_rate": to,
+        report.append({"participant": pid, "catch_acc": acc, "catch_cevreli_acc": ctx_acc,
+                       "timeout_rate": to,
                        "excluded": bool(reasons), "reason": "; ".join(reasons)})
     report = pd.DataFrame(report)
     keep = report.loc[~report["excluded"], "participant"]
