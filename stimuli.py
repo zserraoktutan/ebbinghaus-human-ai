@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw
 RATIOS = [0.4, 0.7, 1.0, 1.5, 2.0]      # çevre çapı / referans merkez çapı
 NEAR_GAP = 0.2                          # kenar-kenar boşluk (referans çap cinsinden)
 FAR_GAP = 1.5                           # uzak kontrol boşluğu
-COMPARISON = [0.84, 0.92, 1.00, 1.08, 1.16]  # karşılaştırma boyutları (x D)
+COMPARISON = [0.80, 0.90, 1.00, 1.10, 1.20]  # karşılaştırma boyutları (x D)  
 
 HUMAN = dict(canvas=560, center_d=60, max_shift=10)  # insan deneyi
 MODEL = dict(canvas=224, center_d=24, max_shift=8)   # model girdisi
@@ -112,7 +112,7 @@ def check_all():
                     for sh in shifts:
                         assert fits(circ, p["canvas"], sh), (setup_name, name, c, rot, sh)
             worst[(setup_name, name)] = extent(
-                layout(p["center_d"] * 1.16, r, g, ref_d=p["center_d"])
+                layout(p["center_d"] * max(COMPARISON), r, g, ref_d=p["center_d"])
             )
     return worst
 

@@ -40,7 +40,7 @@ Kök klasördeki betikler:
 
 Seed 2026 sabittir; her bilgisayarda aynı dosyalar üretilir.
 
-**Tasarım:** 8 koşul (merkez tek, 5 oran: 0.4/0.7/1.0/1.5/2.0, 2 uzak kontrol) × 5 karşılaştırma boyutu (0.84–1.16 × D) × 2 taraf = 80 görsel. Görsel 1120 × 560 px; merkez D = 60 px.
+**Tasarım:** 8 koşul (merkez tek, 5 oran: 0.4/0.7/1.0/1.5/2.0, 2 uzak kontrol) × 5 karşılaştırma boyutu (0.80–1.20 × D) × 2 taraf = 80 görsel. Görsel 1120 × 560 px; merkez D = 60 px.
 **Dikkat (catch) denemeleri (6 görsel, koşul adı `catch`):**
 - Çevresiz: tek koşulunun aynısı, karşılaştırma 0.6 ve 1.4 × D, sol/sağ → 4 görsel.
 - Çevreli: r2.0 çevre + karşılaştırma 1.4 × D, sol/sağ → 2 görsel. Yanılsama ve fiziksel fark aynı yönde olduğu için doğru cevap açıktır; görevi "hangi şekil büyük" diye anlayan katılımcı bağlamlı tarafı seçer ve yakalanır (pilotta görülen yanlış anlama).
