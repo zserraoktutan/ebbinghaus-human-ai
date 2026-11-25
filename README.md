@@ -41,7 +41,11 @@ Kök klasördeki betikler:
 Seed 2026 sabittir; her bilgisayarda aynı dosyalar üretilir.
 
 **Tasarım:** 8 koşul (merkez tek, 5 oran: 0.4/0.7/1.0/1.5/2.0, 2 uzak kontrol) × 5 karşılaştırma boyutu (0.84–1.16 × D) × 2 taraf = 80 görsel. Görsel 1120 × 560 px; merkez D = 60 px.
-**Dikkat (catch) denemeleri:** Tek koşulunun aynısı, karşılaştırma 0.6 ve 1.4 × D (36 ve 84 px), sol/sağ → 4 görsel. Koşul adı `catch`. Ana döngüde nReps = 3 ile 12 dikkat denemesi olur. Bu blok mevcut döngünün arkasında üretilir; böylece seed sırası bozulmaz ve önceki 80 görsel değişmez.
+**Dikkat (catch) denemeleri (6 görsel, koşul adı `catch`):**
+- Çevresiz: tek koşulunun aynısı, karşılaştırma 0.6 ve 1.4 × D, sol/sağ → 4 görsel.
+- Çevreli: r2.0 çevre + karşılaştırma 1.4 × D, sol/sağ → 2 görsel. Yanılsama ve fiziksel fark aynı yönde olduğu için doğru cevap açıktır; görevi "hangi şekil büyük" diye anlayan katılımcı bağlamlı tarafı seçer ve yakalanır (pilotta görülen yanlış anlama).
+- Ana döngüde nReps = 3 ile 18 dikkat denemesi; eşik 15/18 (%80).
+- Bloklar mevcut döngünün arkasında üretilir; seed sırası bozulmaz, önceki görseller değişmez.
 
 **PsychoPy notları:**
 - Döngü: conditionsFile = `stimuli/stimuli.csv`, loopType = random, nReps = 3 → 240 deneme.

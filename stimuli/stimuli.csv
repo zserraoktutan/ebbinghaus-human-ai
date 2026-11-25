@@ -83,3 +83,5 @@ stimuli/png/catch_c0.60_L.png,catch,,0.2,0.60,36.0,60,left,left,352.4,9.94,-6.58
 stimuli/png/catch_c0.60_R.png,catch,,0.2,0.60,36.0,60,right,right,194.1,-6.72,7.74,0.30,7.65
 stimuli/png/catch_c1.40_L.png,catch,,0.2,1.40,84.0,60,left,right,231.6,-9.96,-2.51,-2.64,-5.68
 stimuli/png/catch_c1.40_R.png,catch,,0.2,1.40,84.0,60,right,left,55.5,2.20,-7.47,9.70,-0.31
+stimuli/png/catch_r2.0_c1.40_L.png,catch,2.0,0.2,1.40,84.0,60,left,right,314.6,4.53,-2.38,2.34,2.95
+stimuli/png/catch_r2.0_c1.40_R.png,catch,2.0,0.2,1.40,84.0,60,right,left,125.2,8.19,-7.58,0.38,6.57

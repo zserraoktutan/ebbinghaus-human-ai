@@ -111,6 +111,34 @@ def main():
                 "cmp_shift_x": f"{ms[0]:.2f}", "cmp_shift_y": f"{ms[1]:.2f}",
             })
 
+
+    # --- Çevreli dikkat denemeleri: r2.0 çevre + karşılaştırma ×1.4 ---
+    # Yanılsama ve fiziksel fark aynı yönde (tek daire büyük) → doğru cevap açık.
+    # Görevi "hangi şekil büyük" diye anlayan katılımcı bağlamlı tarafı seçer → yakalanır.
+    name, r, g = next(x for x in condition_list() if x[0] == "r2.0")
+    c = 1.4
+    for side in ("left", "right"):
+        img, rot, cs, ms = make_pair(r, g, c, side, rng)
+        fname = f"catch_r2.0_c{c:.2f}_{side[0].upper()}.png"
+        img.save(PNG_DIR / fname)
+        corr = "right" if side == "left" else "left"   # karşılaştırma dairesi büyük
+
+        rows.append({
+            "image": f"stimuli/png/{fname}",
+            "condition": "catch",
+            "ratio": r,
+            "gap": g,
+            "comparison": f"{c:.2f}",
+            "comparison_d": f"{HUMAN['center_d'] * c:.1f}",
+            "center_d": HUMAN["center_d"],
+            "context_side": side,
+            "corrAns": corr,
+            "rotation_deg": f"{math.degrees(rot):.1f}",
+            "ctx_shift_x": f"{cs[0]:.2f}", "ctx_shift_y": f"{cs[1]:.2f}",
+            "cmp_shift_x": f"{ms[0]:.2f}", "cmp_shift_y": f"{ms[1]:.2f}",
+        })
+
+
     with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
