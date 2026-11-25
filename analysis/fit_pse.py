@@ -3,7 +3,7 @@ Psikometrik fit: her katılımcı ve her koşul için PSE (öznel eşitlik nokta
 
 Model (ortak eğimli lojistik, PDF Bölüm 5):
     P(karşılaştırma seçildi) = λ/2 + (1-λ) * σ( (log c - log PSE_k) / s )
-      c      : karşılaştırma boyutu / D  (0.84 ... 1.16)
+      c      : karşılaştırma boyutu / D  (0.80 ... 1.20)
       PSE_k  : k koşulundaki PSE (koşula özgü)
       s      : genişlik, katılımcının tüm koşullarında ORTAK
       λ      : dikkatsizlik (lapse) oranı, 0–0.10 arası
@@ -152,11 +152,11 @@ def fit_agg(agg, lapse_max=0.10, shared_slope=True):
     out = pd.DataFrame({"condition": conds})
     out["pse"] = out["condition"].map(pse_map)
     out["pse_shift_pct"] = (out["pse"] - 1) * 100
-    out["censored"] = out["condition"].map(cens)   # "", ">1.16" ya da "<0.84"
+    out["censored"] = out["condition"].map(cens)   # "", ">üst sınır" ya da "<alt sınır" (ör. ">1.20")
     out["n_trials"] = agg.groupby("condition")["n"].sum().reindex(conds).to_numpy()
     out["s"], out["lapse"], out["converged"] = s, lapse, conv
     # Aralık içinde ama yine de sınıra yakın (güvenilmez) tahminler
-    out["at_bound"] = (out["pse"] < 0.80) | (out["pse"] > 1.25)
+    out["at_bound"] = (out["pse"] < 0.75) | (out["pse"] > 1.33)
     return out
 
 
@@ -226,7 +226,7 @@ def plot(agg, per_pp, path, ylabel="P(karşılaştırma daha büyük)"):
     import matplotlib.pyplot as plt
     conds = sorted(agg["condition"].unique())
     fig, axes = plt.subplots(2, (len(conds) + 1) // 2, figsize=(14, 6), sharey=True)
-    xs = np.linspace(0.82, 1.18, 200)
+    xs = np.linspace(agg["comparison"].min() * 0.98, agg["comparison"].max() * 1.02, 200)
     for ax, c in zip(axes.flat, conds):
         g = agg[agg["condition"] == c].groupby("comparison")[["k", "n"]].sum()
         ax.plot(g.index, g["k"] / g["n"], "o", color="#333")

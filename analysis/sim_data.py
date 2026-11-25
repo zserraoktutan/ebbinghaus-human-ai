@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 # ---- Tasarım (PDF Bölüm 4 ile aynı) ---------------------------------------
-COMPARISON = [0.84, 0.92, 1.00, 1.08, 1.16]   # karşılaştırma / D
+COMPARISON = [0.80, 0.90, 1.00, 1.10, 1.20]   # karşılaştırma / D (v1.0, 25.11)
 REPS = 6                                       # her (koşul, boyut) için tekrar
 CENTER_D = 60                                  # px, yalnızca bilgi amaçlı
 

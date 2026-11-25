@@ -35,6 +35,7 @@ def test_large_n():
 
 
 def test_realistic(n=18, seed=1, tmp=Path("data/_check")):
+    import shutil; shutil.rmtree(tmp, ignore_errors=True)
     rng = np.random.default_rng(seed)
     tmp.mkdir(parents=True, exist_ok=True)
     truths = []
@@ -65,13 +66,17 @@ def main():
     print("SONUÇ:", "GEÇTİ" if t1 else "KALDI", f"(en büyük hata %{res['err_pct'].abs().max():.2f})\n")
     ok &= t1
 
-    g, indiv = test_realistic()
-    print("Test 2 — gerçekçi: 18 katılımcı x 30 deneme/koşul (PSE kayması, %)")
-    print(g.round(2).to_string())
-    t2 = (g["err"].abs() <= TOL).all()
-    print("SONUÇ:", "GEÇTİ" if t2 else "KALDI", f"(grup ortalamasında en büyük hata {g['err'].abs().max():.2f} puan)")
-    print(f"Bilgi: bireysel PSE hatası medyan {indiv.median():.2f}, %90'lık {indiv.quantile(.9):.2f} puan "
-          "(30 denemeyle normal; bu yüzden analiz grup düzeyinde yapılıyor)")
+    # Tek bir rastgele örnek gürültülüdür; yanlılığı 10 simülasyonun ortalamasıyla ölçüyoruz.
+    runs = [test_realistic(seed=s, tmp=Path(f"data/_check{s}")) for s in range(1, 11)]
+    bias = pd.concat([g["err"] for g, _ in runs], axis=1).mean(axis=1)
+    maxerr = [g["err"].abs().max() for g, _ in runs]
+    print("Test 2 — gerçekçi: 18 katılımcı x 30 deneme/koşul, 10 simülasyon")
+    print("Koşul başına ortalama hata (yanlılık, puan):")
+    print(bias.round(2).to_string())
+    t2 = (bias.abs() <= TOL).all()
+    print("SONUÇ:", "GEÇTİ" if t2 else "KALDI", f"(en büyük yanlılık {bias.abs().max():.2f} puan)")
+    print(f"Bilgi: tek bir 18 kişilik örnekte grup ortalamasının en büyük hatası tipik olarak "
+          f"{np.median(maxerr):.1f} puan (aralık {min(maxerr):.1f}–{max(maxerr):.1f}). Bu örnekleme gürültüsü, kod hatası değil.")
     ok &= t2
 
     print("\nGENEL:", "P1 ölçütü sağlandı ✔" if ok else "Bir test kaldı ✘")
